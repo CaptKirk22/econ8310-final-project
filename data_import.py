@@ -35,8 +35,8 @@ class BaseballVideos(torch.utils.data.Dataset):
         # load all image files, sorting them to
         # ensure that they are aligned
         if root==None:
-            self.vids = list(sorted([i for i in os.listdir(os.path.join(os.path.curdir, "Raw Videos")) if '.mov' in i]))
-            self.notes = list(sorted([i for i in os.listdir(os.path.join(os.path.curdir, "Annotations")) if '.xml' in i]))
+            self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[:5]
+            self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[:5]
             if len(self.vids)!=len(self.notes):
                 raise RuntimeError("Mismatch of annotation files and video files.\nPlease confirm that you have one annotation file for each video and try again.")
         imgs = []
@@ -115,12 +115,10 @@ class BaseballVideos(torch.utils.data.Dataset):
 data = BaseballVideos()
 
 frame = np.moveaxis(np.array(data.__getitem__(35)[0]), 0, -1)
-cv2_imshow(frame)
-
-from google.colab.patches import cv2_imshow
 
 cap = cv.VideoCapture('dusty_1.mov')
 ret, frame = cap.read()
 
-cv2_imshow(frame)
+#cv2_imshow(frame)
+
 
