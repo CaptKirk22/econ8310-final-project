@@ -35,8 +35,8 @@ class BaseballVideos(torch.utils.data.Dataset):
         # load all image files, sorting them to
         # ensure that they are aligned
         if root==None:
-            self.vids = list(sorted([i for i in os.listdir(os.path.curdir) if '.mov' in i]))
-            self.notes = list(sorted([i for i in os.listdir(os.path.curdir) if '.xml' in i]))
+            self.vids = list(sorted([i for i in os.listdir(os.path.join(os.path.curdir, "Raw Videos")) if '.mov' in i]))
+            self.notes = list(sorted([i for i in os.listdir(os.path.join(os.path.curdir, "Annotations")) if '.xml' in i]))
             if len(self.vids)!=len(self.notes):
                 raise RuntimeError("Mismatch of annotation files and video files.\nPlease confirm that you have one annotation file for each video and try again.")
         imgs = []
