@@ -25,6 +25,6 @@ pathsFrom = matchedAnnotations + matchedVideos
 pathAnnotations = ['Model Data\\' + i +'.xml' for i in present]
 pathVideos = ['Model Data\\' + i + '.mov' for i in present]
 pathsTo = pathAnnotations + pathVideos
-for i in range(0,len(paths)):
+for i in range(0,len(pathsTo)):
     print(i)
     shutil.copy(pathsFrom[i],pathsTo[i])
