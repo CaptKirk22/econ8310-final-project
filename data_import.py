@@ -77,6 +77,7 @@ class BaseballVideos(torch.utils.data.Dataset):
                     labels.append(label)
                     areas.append(area)
                     movings.append(moving)
+                    # if moving null, say moving?
 
                 target = {}
                 target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=canvas_size)
@@ -95,6 +96,8 @@ class BaseballVideos(torch.utils.data.Dataset):
             # target["image_id"] = image_id
             # target["area"] = area
             # target["iscrowd"] = iscrowd
+        self.imgs
+        self.notes
 
     def __len__(self):
         return len(self.imgs)
