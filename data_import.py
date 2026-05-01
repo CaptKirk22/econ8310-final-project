@@ -28,6 +28,8 @@ import torch.nn as nn
 # for videos
 import cv2 as cv
 
+os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
+
 class BaseballVideos(torch.utils.data.Dataset):
     def __init__(self, root=None, transforms=None):
         self.root = root
@@ -35,17 +37,20 @@ class BaseballVideos(torch.utils.data.Dataset):
         # load all image files, sorting them to
         # ensure that they are aligned
         if root==None:
-            self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[:5]
-            self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[:5]
+            self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))
+            self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))
             if len(self.vids)!=len(self.notes):
                 raise RuntimeError("Mismatch of annotation files and video files.\nPlease confirm that you have one annotation file for each video and try again.")
         imgs = []
         notes = []
+        index = 0
         for i, k in zip(self.vids, self.notes):
             cap = cv.VideoCapture(i)
             note = minidom.parse(k)
             ret = True
             frame_count = 0
+            print(index)
+            index += 1
             while ret:
               ret, frame = cap.read()
               if ret:
@@ -62,7 +67,16 @@ class BaseballVideos(torch.utils.data.Dataset):
                 movings = []
 
                 for j in frame_i:
-                    moving = j.getElementsByTagName('attribute')[0].firstChild.data=='true'
+                    attrs = j.getElementsByTagName('attribute')
+
+
+                    if attrs and attrs[0].firstChild is not None:
+                        moving = attrs[0].firstChild.data == 'true'
+                    
+                    else:
+                        moving = True  # default if attribute is missing
+
+                        
 
                     xtl = float(j.attributes['xtl'].value)
                     ytl = float(j.attributes['ytl'].value)
@@ -86,7 +100,8 @@ class BaseballVideos(torch.utils.data.Dataset):
                 target["moving"] = movings
 
                 notes.append(target)
-        self.imgs = imgs
+        cap.release()        
+        #self.imgs = imgs
         self.notes = notes
 
             # target = {}
@@ -114,10 +129,7 @@ class BaseballVideos(torch.utils.data.Dataset):
 
 data = BaseballVideos()
 
-frame = np.moveaxis(np.array(data.__getitem__(35)[0]), 0, -1)
 
-cap = cv.VideoCapture('dusty_1.mov')
-ret, frame = cap.read()
 
 #cv2_imshow(frame)
 
