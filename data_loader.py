@@ -67,7 +67,7 @@ BaseballNN =  FasterRCNN(
 
 
 end = 0
-os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
+#os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
 
 for iteration in range(1):
     if end == 0:
@@ -117,7 +117,7 @@ for iteration in range(1):
                         boxes = []
                         labels = []
                         areas = []
-                        movings = []
+                        #movings = []
 
                         for j in frame_i:
                             attrs = j.getElementsByTagName('attribute')
@@ -152,6 +152,7 @@ for iteration in range(1):
                         target["area"] = areas
                         #target["moving"] = movings
 
+                        
                         notes.append(target)
                  
             self.imgs = imgs
@@ -206,21 +207,24 @@ num_classes = 2
 
 # split the dataset in train and test set
 indices = torch.randperm(len(dataset)).tolist()
-dataset = torch.utils.data.Subset(dataset, indices[:-50])
-dataset_test = torch.utils.data.Subset(dataset_test, indices[-50:])
+dataset_test = torch.utils.data.Subset(dataset, indices[-50:])
+dataset_train = torch.utils.data.Subset(dataset, indices[:-50])
 
 # define training and validation data loaders
 data_loader = torch.utils.data.DataLoader(
-    dataset,
+    dataset_train,
     batch_size=2,
     shuffle=True,
 )
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
 
 data_loader_test = torch.utils.data.DataLoader(
     dataset_test,
     batch_size=1,
     shuffle=False,
-    collate_fn=utils.collate_fn
+    collate_fn=collate_fn
 )
 
 # get the model using our helper function
