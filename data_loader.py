@@ -32,14 +32,30 @@ from torchvision.models.detection import FasterRCNN
 # for videos
 import cv2 as cv
 
-
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 #define nn
 
 BaseballNN = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
 
+num_classes = 2
+
+in_features = BaseballNN.roi_heads.box_predictor.cls_score.in_features
+
+BaseballNN.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
 def collate_fn(batch):
     return tuple(zip(*batch))
+
+if torch.xpu.is_available():
+    device = torch.device("xpu")
+    print(f"Using device: {torch.xpu.get_device_name(0)}")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+    print(f"Using device: {torch.cuda.get_device_name(0)}")
+else:
+    device = torch.device("cpu")
+    print("GPUs not found, using CPU.")
 
 
 params = [p for p in BaseballNN.parameters() if p.requires_grad]
@@ -213,7 +229,7 @@ for iteration in range(1):
 # define training and validation data loaders
 
 
-
+BaseballNN.to(device)
 
     
 if iteration+1 in [4,8,13]:
@@ -226,8 +242,9 @@ if iteration+1 in [4,8,13]:
     BaseballNN.eval()
     with torch.no_grad():
         for images, targets in data_loader_test:
-            images = [img for img in images]
+            images = [img.to(device) for img in images]
             predictions = BaseballNN(images)
+            #TODO: add accuracy score (iou?)
 else: 
     
     
@@ -237,18 +254,21 @@ else:
     shuffle=True,
     collate_fn=collate_fn
       )
-    BaseballNN.train()
-    size = len(data_loader.dataset)
-    for batch, (X, label) in enumerate(data_loader):
-        pred = BaseballNN(X, label)
-        loss = sum(loss for loss in pred.values())
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        if batch % 10 == 0:
-            loss_val, current = loss.item(), (batch + 1) * len(X)
-            print(f"loss: {loss_val:>7f}  [{current:>5d}/{size:>5d}]")
-    #torch.save(BaseballNN.dict(),'baseball_model.pt')
+    for epoch in range(num_epochs):
+        BaseballNN.train()
+        size = len(data_loader.dataset)
+        for batch, (X, label) in enumerate(data_loader):
+            pred = BaseballNN(X, label)
+            loss = sum(loss for loss in pred.values())
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            if batch % 10 == 0:
+                loss_val, current = loss.item(), (batch + 1) * len(X)
+                print(f"loss: {loss_val:>7f}  [{current:>5d}/{size:>5d}]")
+        #torch.save(BaseballNN.dict(),'baseball_model.pt')
+        #TODO: add interation num back
+        #TODO: add import earlier so model can built off itself
 
 del dataset, size, data_loader
 
