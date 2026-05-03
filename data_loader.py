@@ -99,7 +99,23 @@ num_epochs = 1
 end = 0
 os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
 
-for iteration in range(1):
+#check for existing model and loop index
+if 'iteration.txt' in os.listdir():
+    with open("file.txt", "r") as f:
+     iteration = int(f.read().strip())
+     BaseballNN = torch.load('baseball_model.pt')
+else: iteration = 0
+
+
+if iteration == 0:
+    upper = 13
+else:
+    upper = 13 - iteration
+    start = (iteration +1) * 4 + 1
+
+
+
+for iteration in range(upper):
     if end == 0:
         start = 0
     else:
@@ -108,7 +124,7 @@ for iteration in range(1):
     if iteration == 0:
         end = 5
     else:    
-        end = (iteration +1) * 4
+        end = (iteration +1) * 4 + 1
     
     print(f'{start}:{end}')
 
@@ -179,12 +195,12 @@ for iteration in range(1):
                         target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=canvas_size)
                         target["labels"] = torch.tensor(labels, dtype=torch.int64)
                         target["area"] = torch.tensor(areas, dtype=torch.float32)
-                        target["moving"] = torch.tensor(movings, dtype=torch.bool)
+                        target["moving"] = torch.tensor(movings, dtype=torch.int64)
                     else:
                         target["boxes"] = torch.zeros((0, 4), dtype=torch.float32)
                         target["labels"] = torch.zeros((0,), dtype=torch.int64)
                         target['area'] = torch.zeros((0,), dtype=torch.float32)
-                        target['moving'] = torch.zeros((0,), dtype=torch.bool)
+                        target['moving'] = torch.zeros((0,), dtype=torch.int64)
                     notes.append(target)
                  
             self.imgs = imgs
@@ -222,71 +238,77 @@ for iteration in range(1):
 # define training and validation data loaders
 
 
-BaseballNN.to(device)
-from ultralytics.utils.metrics import box_iou
+    BaseballNN.to(device)
+    from ultralytics.utils.metrics import box_iou
 
-alpha = .5 # iou threshold
-    
-if iteration+1 in [4,8,13]:
-    data_loader_test = torch.utils.data.DataLoader(
-    dataset,
-    batch_size=1,
-    shuffle=False,
-    collate_fn=collate_fn
-     )
-    BaseballNN.eval()
-    with torch.no_grad():
-        for images, targets in data_loader_test:
-            images = [img.to(device) for img in images]
-            predictions = BaseballNN(images)
+    alpha = .5 # iou threshold
+        
+    if iteration+1 in [4,8,13]:
+        data_loader_test = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        collate_fn=collate_fn
+        )
+        BaseballNN.eval()
+        size = len(data_loader_test.dataset)
+        correct = 0
+        total = 0
+        with torch.no_grad():
 
-            for pred, targ in zip(predictions, targets):
-                p_labels = pred['labels'].cpu().numpy()
-                t_labels = targ['labels'].cpu().numpy()
-                p_boxes = pred['boxes'].cpu().numpy()
-                t_boxes = targ['boxes'].cpu().numpy()
-                found = False
-                for targ in t_boxes:
-                    for pred in p_boxes:
-                        if box_iou(targ, pred) > alpha:
-                            found = True
+            for images, targets in data_loader_test:
+                images = [img.to(device) for img in images]
+                predictions = BaseballNN(images)
+                
+                for pred, targ in zip(predictions, targets):
+                    p_labels = pred['labels'].cpu().numpy()
+                    t_labels = targ['labels'].cpu().numpy()
+                    p_boxes = pred['boxes'].cpu().numpy()
+                    t_boxes = targ['boxes'].cpu().numpy()
+                    found = False
+                    for targ in t_boxes:
+                        for pred in p_boxes:
+                            if box_iou(targ, pred) > alpha:
+                                found = True
+                                break
+                        if found:
                             break
                     if found:
-                        break
-                if found:
-                    correct += 1
-                total += 1
-                        
+                        correct += 1
+                    total += 1
+                            
 
-    accuracy = 100.0 * correct / total
-    print(f"Detection accuracy: {accuracy:.2f}%")
+        accuracy = 100.0 * correct / total
+        print(f"Detection accuracy: {accuracy:.2f}%")
 
-else: 
-    
-    
-    data_loader = torch.utils.data.DataLoader(
-    dataset,
-    batch_size=2,
-    shuffle=True,
-    collate_fn=collate_fn
-      )
-    for epoch in range(num_epochs):
-        BaseballNN.train()
-        size = len(data_loader.dataset)
-        for batch, (X, label) in enumerate(data_loader):
-            pred = BaseballNN(X, label)
-            loss = sum(loss for loss in pred.values())
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            if batch % 10 == 0:
-                loss_val, current = loss.item(), (batch + 1) * len(X)
-                print(f"loss: {loss_val:>7f}  [{current:>5d}/{size:>5d}]")
-        #torch.save(BaseballNN.dict(),'baseball_model.pt')
-        #TODO: add interation num back
-        #TODO: add import earlier so model can built off itself
-
-del dataset, size, data_loader
+    else: 
+        
+        
+        data_loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=2,
+        shuffle=True,
+        collate_fn=collate_fn
+        )
+        for epoch in range(num_epochs):
+            BaseballNN.train()
+            size = len(data_loader.dataset)
+            for batch, (X, label) in enumerate(data_loader):
+                pred = BaseballNN(X, label)
+                loss = sum(loss for loss in pred.values())
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                if batch % 10 == 0:
+                    loss_val, current = loss.item(), (batch + 1) * len(X)
+                    print(f"loss: {loss_val:>7f}  [{current:>5d}/{size:>5d}]")
+            torch.save(BaseballNN.state_dict(),'baseball_model.pt')
+            with open('iteration.txt', 'w') as file:
+                file.write(str(iteration+1))
+            #TODO: add interation num back
+            #TODO: add import earlier so model can built off itself
+    print(f"loop {iteration +1} complete")
+    del dataset, size, data_loader
 
 
 
