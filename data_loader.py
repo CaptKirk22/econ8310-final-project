@@ -38,7 +38,7 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 BaseballNN = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
 
-num_classes = 2
+num_classes = 3
 
 in_features = BaseballNN.roi_heads.box_predictor.cls_score.in_features
 
@@ -55,7 +55,7 @@ elif torch.cuda.is_available():
     print(f"Using device: {torch.cuda.get_device_name(0)}")
 else:
     device = torch.device("cpu")
-    print("GPUs not found, using CPU.")
+    print("GPUs not found, using CPU")
 
 
 params = [p for p in BaseballNN.parameters() if p.requires_grad]
@@ -142,55 +142,50 @@ for iteration in range(1):
                         imgs.append(torch.from_numpy(frame).float()/255)
                         canvas_size = list(frame.shape[1:])
 
-                    for f in range(frame_count):
-                        frame_i = [j for j in note.getElementsByTagName("box") if int(j.attributes['frame'].value)==f]
-                        boxes = []
-                        labels = []
-                        areas = []
-                        movings = []
+                for f in range(frame_count):
+                    # Collect all boxes for this frame, regardless of 'moving' attribute
+                    frame_i = [j for j in note.getElementsByTagName("box") if int(j.attributes['frame'].value)==f]
+                    boxes = []
+                    labels = []
+                    areas = []
+                    movings = []
 
-                        for j in frame_i:
-                            attrs = j.getElementsByTagName('attribute')
-                            #print(attrs[0])
-
-                            if attrs is not None:
-                                
-                                moving = attrs[0].firstChild.data == 'true'
-                            
-                            else:
-                                moving = False  # default if attribute is missing
-
-                            print(moving)
-                            if moving:
-                                xtl = float(j.attributes['xtl'].value)
-                                ytl = float(j.attributes['ytl'].value)
-                                xbr = float(j.attributes['xbr'].value)
-                                ybr = float(j.attributes['ybr'].value)
-                                box = (xtl, ytl, xbr, ybr)
-
-                                label = 1
-                                area = (xbr - xtl) * (ybr - ytl)
-
-                                boxes.append(box)
-                                labels.append(label)
-                                areas.append(area)
-                                #movings.append(moving)
-
-                        target = {}
-                        print(len(boxes))
-                        print(len(labels))
-                        print(len(areas))
-                        if len(boxes) > 0:
-                            target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=canvas_size)
-                            target["labels"] = labels
-                            target["area"] = areas
-                            #target["moving"] = movings
+                    for j in frame_i:
+                        attrs = j.getElementsByTagName('attribute')
+                        if attrs is not None and len(attrs) > 0 and attrs[0].firstChild is not None:
+                            moving = attrs[0].firstChild.data == 'true'
                         else:
-                                target["boxes"] = torch.zeros((0, 4), dtype=torch.float32)
-                                target["labels"] = torch.zeros((0,), dtype=torch.int64)
-                                target['area'] = torch.zeros((0,), dtype=torch.float32)
-                        print(target)
-                        notes.append(target)
+                            moving = False  # default if attribute is missing
+
+                        xtl = float(j.attributes['xtl'].value)
+                        ytl = float(j.attributes['ytl'].value)
+                        xbr = float(j.attributes['xbr'].value)
+                        ybr = float(j.attributes['ybr'].value)
+                        box = (xtl, ytl, xbr, ybr)
+
+                        if moving:
+                            label = 1
+                        else:
+                            label = 2
+                        area = (xbr - xtl) * (ybr - ytl)
+
+                        boxes.append(box)
+                        labels.append(label)
+                        areas.append(area)
+                        movings.append(moving)
+
+                    target = {}
+                    if len(boxes) > 0:
+                        target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=canvas_size)
+                        target["labels"] = torch.tensor(labels, dtype=torch.int64)
+                        target["area"] = torch.tensor(areas, dtype=torch.float32)
+                        target["moving"] = torch.tensor(movings, dtype=torch.bool)
+                    else:
+                        target["boxes"] = torch.zeros((0, 4), dtype=torch.float32)
+                        target["labels"] = torch.zeros((0,), dtype=torch.int64)
+                        target['area'] = torch.zeros((0,), dtype=torch.float32)
+                        target['moving'] = torch.zeros((0,), dtype=torch.bool)
+                    notes.append(target)
                  
             self.imgs = imgs
             self.notes = notes
@@ -219,9 +214,7 @@ for iteration in range(1):
             return img, target
 
     dataset = BaseballVideos()
-    #torch.save(data,f'dataset{iteration}.pt')
-    
-#TODO: move iteration loop to the NN
+
 
 #cv2_imshow(frame)
 
@@ -230,7 +223,9 @@ for iteration in range(1):
 
 
 BaseballNN.to(device)
+from ultralytics.utils.metrics import box_iou
 
+alpha = .5 # iou threshold
     
 if iteration+1 in [4,8,13]:
     data_loader_test = torch.utils.data.DataLoader(
@@ -244,7 +239,28 @@ if iteration+1 in [4,8,13]:
         for images, targets in data_loader_test:
             images = [img.to(device) for img in images]
             predictions = BaseballNN(images)
-            #TODO: add accuracy score (iou?)
+
+            for pred, targ in zip(predictions, targets):
+                p_labels = pred['labels'].cpu().numpy()
+                t_labels = targ['labels'].cpu().numpy()
+                p_boxes = pred['boxes'].cpu().numpy()
+                t_boxes = targ['boxes'].cpu().numpy()
+                found = False
+                for targ in t_boxes:
+                    for pred in p_boxes:
+                        if box_iou(targ, pred) > alpha:
+                            found = True
+                            break
+                    if found:
+                        break
+                if found:
+                    correct += 1
+                total += 1
+                        
+
+    accuracy = 100.0 * correct / total
+    print(f"Detection accuracy: {accuracy:.2f}%")
+
 else: 
     
     
