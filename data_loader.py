@@ -28,8 +28,7 @@ import torch.nn as nn
 # for videos
 import cv2 as cv
 
-#line to help streamline work on my pc
-#os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
+
 end = 0
 for iteration in range(4):
     if end == 0:
@@ -92,27 +91,26 @@ for iteration in range(4):
                                 moving = False  # default if attribute is missing
 
                                 
+                            if moving:
+                                xtl = float(j.attributes['xtl'].value)
+                                ytl = float(j.attributes['ytl'].value)
+                                xbr = float(j.attributes['xbr'].value)
+                                ybr = float(j.attributes['ybr'].value)
+                                box = (xtl, ytl, xbr, ybr)
 
-                            xtl = float(j.attributes['xtl'].value)
-                            ytl = float(j.attributes['ytl'].value)
-                            xbr = float(j.attributes['xbr'].value)
-                            ybr = float(j.attributes['ybr'].value)
-                            box = (xtl, ytl, xbr, ybr)
+                                label = 'baseball'
+                                area = (xbr - xtl) * (ybr - ytl)
 
-                            label = 'baseball'
-                            area = (xbr - xtl) * (ybr - ytl)
-
-                            boxes.append(box)
-                            labels.append(label)
-                            areas.append(area)
-                            movings.append(moving)
-                            # if moving null, say moving?
+                                boxes.append(box)
+                                labels.append(label)
+                                areas.append(area)
+                                #movings.append(moving)
 
                         target = {}
                         target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=canvas_size)
                         target["labels"] = labels
                         target["area"] = areas
-                        target["moving"] = movings
+                        #target["moving"] = movings
 
                         notes.append(target)
                  
@@ -145,7 +143,47 @@ for iteration in range(4):
     data = BaseballVideos()
     torch.save(data,f'dataset{iteration}.pt')
 
+#TODO: move iteration loop to the NN
 
 #cv2_imshow(frame)
+
+import torchvision
+from torchvision.models.detection import FasterRCNN
+from torchvision.models.detection.rpn import AnchorGenerator
+
+
+class BaseballNN():
+    def __init__(self): 
+        # load a pre-trained model for classification and return only the features
+        backbone = torchvision.models.mobilenet_v2(weights="DEFAULT").features
+        #mobilenet_v2 output channels are 1280
+        backbone.out_channels = 1280
+
+        
+        # RPN generate 5 x 3 anchors per spatial location, with 5 different sizes and 3 different aspect ratios. 
+        # Tuple[Tuple[int]] because each feature map could potentially have different sizes and aspect ratios
+        anchor_generator = AnchorGenerator(
+            sizes=((32, 64, 128, 256, 512),),
+            aspect_ratios=((0.5, 1.0, 2.0),)
+        )
+
+        roi_pooler = torchvision.ops.MultiScaleRoIAlign(
+            featmap_names=['0'],
+            output_size=7, # industry standard for FRCNN
+            sampling_ratio=2
+        )
+
+        self.model = FasterRCNN(
+            backbone,
+            num_classes=2, #num_classes: 1=moving ball, 0 = no moving ball
+            rpn_anchor_generator=anchor_generator,
+            box_roi_pool=roi_pooler
+        )
+
+    def get_model(self):
+        return self.model
+
+
+
 
 
