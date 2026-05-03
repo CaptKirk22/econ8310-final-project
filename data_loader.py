@@ -24,13 +24,52 @@ from torchvision.transforms.v2 import functional as F
 # For model building
 import torch
 import torch.nn as nn
+import torchvision
+from torchvision.models.detection import FasterRCNN
+from torchvision.models.detection.rpn import AnchorGenerator
 
 # for videos
 import cv2 as cv
 
 
+
+#define nn
+
+model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
+
+backbone = torchvision.models.mobilenet_v2(weights="DEFAULT").features
+    #mobilenet_v2 output channels are 1280
+backbone.out_channels = 1280
+
+            
+    # RPN generate 5 x 3 anchors per spatial location, with 5 different sizes and 3 different aspect ratios. 
+    # Tuple[Tuple[int]] because each feature map could potentially have different sizes and aspect ratios
+anchor_generator = AnchorGenerator(
+sizes=((32, 64, 128, 256, 512),),
+aspect_ratios=((0.5, 1.0, 2.0),)
+            )
+
+roi_pooler = torchvision.ops.MultiScaleRoIAlign(
+    featmap_names=['0'],
+    output_size=7, # industry standard for FRCNN
+    sampling_ratio=2
+        )
+
+BaseballNN =  FasterRCNN(
+    backbone,
+    num_classes=2, #num_classes: 1=moving ball, 0 = no moving ball
+    rpn_anchor_generator=anchor_generator,
+    box_roi_pool=roi_pooler
+    )
+
+
+
+
+
 end = 0
-for iteration in range(4):
+os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
+
+for iteration in range(1):
     if end == 0:
         start = 0
     else:
@@ -51,8 +90,8 @@ for iteration in range(4):
             # load all image files, sorting them to
             # ensure that they are aligned
             if root==None:
-                self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[start:end]
-                self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[start:end]
+                self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[0:5]
+                self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[0:5]
                 if len(self.vids)!=len(self.notes):
                     raise RuntimeError("Mismatch of annotation files and video files.\nPlease confirm that you have one annotation file for each video and try again.")
             imgs = []
@@ -82,15 +121,16 @@ for iteration in range(4):
 
                         for j in frame_i:
                             attrs = j.getElementsByTagName('attribute')
+                            #print(attrs[0])
 
-
-                            if attrs and attrs[0].firstChild is not None:
+                            if attrs is not None:
+                                print(attrs[0].firstChild.data)
                                 moving = attrs[0].firstChild.data == 'true'
                             
                             else:
                                 moving = False  # default if attribute is missing
 
-                                
+                            print(moving)
                             if moving:
                                 xtl = float(j.attributes['xtl'].value)
                                 ytl = float(j.attributes['ytl'].value)
@@ -140,50 +180,82 @@ for iteration in range(4):
 
             return img, target
 
-    data = BaseballVideos()
-    torch.save(data,f'dataset{iteration}.pt')
-
+    dataset = BaseballVideos()
+    #torch.save(data,f'dataset{iteration}.pt')
+    
 #TODO: move iteration loop to the NN
 
 #cv2_imshow(frame)
 
-import torchvision
-from torchvision.models.detection import FasterRCNN
-from torchvision.models.detection.rpn import AnchorGenerator
-
-
-class BaseballNN():
-    def __init__(self): 
-        # load a pre-trained model for classification and return only the features
-        backbone = torchvision.models.mobilenet_v2(weights="DEFAULT").features
-        #mobilenet_v2 output channels are 1280
-        backbone.out_channels = 1280
-
-        
-        # RPN generate 5 x 3 anchors per spatial location, with 5 different sizes and 3 different aspect ratios. 
-        # Tuple[Tuple[int]] because each feature map could potentially have different sizes and aspect ratios
-        anchor_generator = AnchorGenerator(
-            sizes=((32, 64, 128, 256, 512),),
-            aspect_ratios=((0.5, 1.0, 2.0),)
-        )
-
-        roi_pooler = torchvision.ops.MultiScaleRoIAlign(
-            featmap_names=['0'],
-            output_size=7, # industry standard for FRCNN
-            sampling_ratio=2
-        )
-
-        self.model = FasterRCNN(
-            backbone,
-            num_classes=2, #num_classes: 1=moving ball, 0 = no moving ball
-            rpn_anchor_generator=anchor_generator,
-            box_roi_pool=roi_pooler
-        )
-
-    def get_model(self):
-        return self.model
 
 
 
+
+
+
+
+   
+
+    # train on the accelerator or on the CPU, if an accelerator is not available
+    #device = torch.accelerator.current_accelerator() if torch.accelerator.is_available() else torch.device('cpu')
+
+# our dataset has two classes only - background and person
+num_classes = 2
+# use our dataset and defined transformations
+
+
+# split the dataset in train and test set
+indices = torch.randperm(len(dataset)).tolist()
+dataset = torch.utils.data.Subset(dataset, indices[:-50])
+dataset_test = torch.utils.data.Subset(dataset_test, indices[-50:])
+
+# define training and validation data loaders
+data_loader = torch.utils.data.DataLoader(
+    dataset,
+    batch_size=2,
+    shuffle=True,
+)
+
+data_loader_test = torch.utils.data.DataLoader(
+    dataset_test,
+    batch_size=1,
+    shuffle=False,
+    collate_fn=utils.collate_fn
+)
+
+# get the model using our helper function
+model = get_model_instance_segmentation(num_classes)
+
+# move model to the right device
+model.to(device)
+
+# construct an optimizer
+params = [p for p in model.parameters() if p.requires_grad]
+optimizer = torch.optim.SGD(
+    params,
+    lr=0.005,
+    momentum=0.9,
+    weight_decay=0.0005
+)
+
+# and a learning rate scheduler
+lr_scheduler = torch.optim.lr_scheduler.StepLR(
+    optimizer,
+    step_size=3,
+    gamma=0.1
+)
+
+# let's train it just for 2 epochs
+num_epochs = 2
+
+for epoch in range(num_epochs):
+    # train for one epoch, printing every 10 iterations
+    train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10)
+    # update the learning rate
+    lr_scheduler.step()
+    # evaluate on the test dataset
+    evaluate(model, data_loader_test, device=device)
+
+print("That's it!")
 
 
