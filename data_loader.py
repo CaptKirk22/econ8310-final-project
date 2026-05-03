@@ -9,6 +9,7 @@ Original file is located at
 
 # For reading data
 import os
+import gc
 import numpy as np
 from xml.dom import minidom
 
@@ -26,7 +27,7 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision.models.detection import FasterRCNN
-from torchvision.models.detection.rpn import AnchorGenerator
+#from torchvision.models.detection.rpn import AnchorGenerator
 
 # for videos
 import cv2 as cv
@@ -35,32 +36,45 @@ import cv2 as cv
 
 #define nn
 
-model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
+BaseballNN = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
 
-backbone = torchvision.models.mobilenet_v2(weights="DEFAULT").features
+def collate_fn(batch):
+    return tuple(zip(*batch))
+
+
+params = [p for p in BaseballNN.parameters() if p.requires_grad]
+optimizer = torch.optim.SGD(
+    BaseballNN.parameters(),
+    lr=0.005,
+    momentum=0.9,
+    weight_decay=0.0005
+)
+
+# construct an optimizer
+
+
+# let's train it just for 2 epochs
+num_epochs = 1
+
+#backbone = torchvision.models.mobilenet_v2(weights="DEFAULT").features
     #mobilenet_v2 output channels are 1280
-backbone.out_channels = 1280
+#backbone.out_channels = 1280
 
             
     # RPN generate 5 x 3 anchors per spatial location, with 5 different sizes and 3 different aspect ratios. 
     # Tuple[Tuple[int]] because each feature map could potentially have different sizes and aspect ratios
-anchor_generator = AnchorGenerator(
-sizes=((32, 64, 128, 256, 512),),
-aspect_ratios=((0.5, 1.0, 2.0),)
-            )
+#anchor_generator = AnchorGenerator(
+#sizes=((32, 64, 128, 256, 512),),
+#aspect_ratios=((0.5, 1.0, 2.0),)
+#            )
 
-roi_pooler = torchvision.ops.MultiScaleRoIAlign(
-    featmap_names=['0'],
-    output_size=7, # industry standard for FRCNN
-    sampling_ratio=2
-        )
+#roi_pooler = torchvision.ops.MultiScaleRoIAlign(
+#    featmap_names=['0'],
+#    output_size=7, # industry standard for FRCNN
+#    sampling_ratio=2
+#        )
 
-BaseballNN =  FasterRCNN(
-    backbone,
-    num_classes=2, #num_classes: 1=moving ball, 0 = no moving ball
-    rpn_anchor_generator=anchor_generator,
-    box_roi_pool=roi_pooler
-    )
+
 
 
 
@@ -76,9 +90,9 @@ for iteration in range(1):
         start = end 
 
     if iteration == 0:
-        end = 13
+        end = 5
     else:    
-        end = (iteration +1) * 13
+        end = (iteration +1) * 4
     
     print(f'{start}:{end}')
 
@@ -90,8 +104,8 @@ for iteration in range(1):
             # load all image files, sorting them to
             # ensure that they are aligned
             if root==None:
-                self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[0:5]
-                self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[0:5]
+                self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[start:end]
+                self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[start:end]
                 if len(self.vids)!=len(self.notes):
                     raise RuntimeError("Mismatch of annotation files and video files.\nPlease confirm that you have one annotation file for each video and try again.")
             imgs = []
@@ -109,7 +123,7 @@ for iteration in range(1):
                     if ret:
                         frame_count += 1
                         frame = np.moveaxis(frame, -1, 0) # Pivot image so color channels first, then H then W
-                        imgs.append(torch.from_numpy(frame))
+                        imgs.append(torch.from_numpy(frame).float()/255)
                         canvas_size = list(frame.shape[1:])
 
                     for f in range(frame_count):
@@ -124,7 +138,7 @@ for iteration in range(1):
                             #print(attrs[0])
 
                             if attrs is not None:
-                                print(attrs[0].firstChild.data)
+                                
                                 moving = attrs[0].firstChild.data == 'true'
                             
                             else:
@@ -138,7 +152,7 @@ for iteration in range(1):
                                 ybr = float(j.attributes['ybr'].value)
                                 box = (xtl, ytl, xbr, ybr)
 
-                                label = 'baseball'
+                                label = 1
                                 area = (xbr - xtl) * (ybr - ytl)
 
                                 boxes.append(box)
@@ -147,11 +161,19 @@ for iteration in range(1):
                                 #movings.append(moving)
 
                         target = {}
-                        target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=canvas_size)
-                        target["labels"] = labels
-                        target["area"] = areas
-                        #target["moving"] = movings
-
+                        print(len(boxes))
+                        print(len(labels))
+                        print(len(areas))
+                        if len(boxes) > 0:
+                            target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=canvas_size)
+                            target["labels"] = labels
+                            target["area"] = areas
+                            #target["moving"] = movings
+                        else:
+                                target["boxes"] = torch.zeros((0, 4), dtype=torch.float32)
+                                target["labels"] = torch.zeros((0,), dtype=torch.int64)
+                                target['area'] = torch.zeros((0,), dtype=torch.float32)
+                        print(target)
                         notes.append(target)
                  
             self.imgs = imgs
@@ -188,74 +210,71 @@ for iteration in range(1):
 #cv2_imshow(frame)
 
 
-
-
-
-
-
-
-   
-
-    # train on the accelerator or on the CPU, if an accelerator is not available
-    #device = torch.accelerator.current_accelerator() if torch.accelerator.is_available() else torch.device('cpu')
-
-# our dataset has two classes only - background and person
-num_classes = 2
-# use our dataset and defined transformations
-
-
-# split the dataset in train and test set
-indices = torch.randperm(len(dataset)).tolist()
-dataset = torch.utils.data.Subset(dataset, indices[:-50])
-dataset_test = torch.utils.data.Subset(dataset_test, indices[-50:])
-
 # define training and validation data loaders
-data_loader = torch.utils.data.DataLoader(
+
+
+
+
+    
+if iteration+1 in [4,8,13]:
+    data_loader_test = torch.utils.data.DataLoader(
+    dataset,
+    batch_size=1,
+    shuffle=False,
+    collate_fn=collate_fn
+     )
+    BaseballNN.eval()
+    with torch.no_grad():
+        for images, targets in data_loader_test:
+            images = [img for img in images]
+            predictions = BaseballNN(images)
+else: 
+    
+    
+    data_loader = torch.utils.data.DataLoader(
     dataset,
     batch_size=2,
     shuffle=True,
-)
+    collate_fn=collate_fn
+      )
+    BaseballNN.train()
+    size = len(data_loader.dataset)
+    for batch, (X, label) in enumerate(data_loader):
+        pred = BaseballNN(X, label)
+        loss = sum(loss for loss in pred.values())
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        if batch % 10 == 0:
+            loss_val, current = loss.item(), (batch + 1) * len(X)
+            print(f"loss: {loss_val:>7f}  [{current:>5d}/{size:>5d}]")
+    #torch.save(BaseballNN.dict(),'baseball_model.pt')
 
-data_loader_test = torch.utils.data.DataLoader(
-    dataset_test,
-    batch_size=1,
-    shuffle=False,
-    collate_fn=utils.collate_fn
-)
-
-# get the model using our helper function
-model = get_model_instance_segmentation(num_classes)
-
-# move model to the right device
-model.to(device)
-
-# construct an optimizer
-params = [p for p in model.parameters() if p.requires_grad]
-optimizer = torch.optim.SGD(
-    params,
-    lr=0.005,
-    momentum=0.9,
-    weight_decay=0.0005
-)
-
-# and a learning rate scheduler
-lr_scheduler = torch.optim.lr_scheduler.StepLR(
-    optimizer,
-    step_size=3,
-    gamma=0.1
-)
-
-# let's train it just for 2 epochs
-num_epochs = 2
-
-for epoch in range(num_epochs):
-    # train for one epoch, printing every 10 iterations
-    train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10)
-    # update the learning rate
-    lr_scheduler.step()
-    # evaluate on the test dataset
-    evaluate(model, data_loader_test, device=device)
-
-print("That's it!")
+del dataset, size, data_loader
 
 
+
+
+
+
+
+#image code for later
+
+
+#image = read_image("data/PennFudanPed/PNGImages/FudanPed00046.png")
+#eval_transform = get_transform(train=False)
+
+
+
+#image = (255.0 * (image - image.min()) / (image.max() - image.min())).to(torch.uint8)
+#image = image[:3, ...]
+#pred_labels = [f"pedestrian: {score:.3f}" for label, score in zip(pred["labels"], pred["scores"])]
+#pred_boxes = pred["boxes"].long()
+#output_image = draw_bounding_boxes(image, pred_boxes, pred_labels, colors="red")
+
+#masks = (pred["masks"] > 0.7).squeeze(1)
+#output_image = draw_segmentation_masks(output_image, masks, alpha=0.5, colors="blue")
+
+
+#plt.figure(figsize=(12, 12))
+#plt.imshow(output_image.permute(1, 2, 0))
