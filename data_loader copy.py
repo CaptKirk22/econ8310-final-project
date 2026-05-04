@@ -24,7 +24,6 @@ import torch
 import torch.nn as nn
 import torchvision
 from torchvision.models.detection import FasterRCNN
-#from torchvision.models.detection.rpn import AnchorGenerator
 
 # for videos
 import cv2 as cv
@@ -97,9 +96,10 @@ end = 0
 
 #check for existing model and loop index
 if 'iteration.txt' in os.listdir():
-    with open("file.txt", "r") as f:
+    with open("iteration.txt", "r") as f:
      iteration = int(f.read().strip())
-     BaseballNN = torch.load('baseball_model.pt')
+     weights = torch.load('baseball_model.pt')
+     BaseballNN.load_state_dict(weights)
 else: iteration = 0
 
 
@@ -247,7 +247,7 @@ for iteration in range(upper):
     train_sampler = torch.utils.data.Subset(dataset, range(0, 2))
     test_sampler = torch.utils.data.Subset(dataset, [2])
         
-    if iteration+1 in [1,4,8,13]:
+    if iteration+1 in [3]:
         data_loader_test = torch.utils.data.DataLoader(
         test_sampler,
         batch_size=1,
@@ -263,10 +263,10 @@ for iteration in range(upper):
                 predictions = BaseballNN(images)
                 
                 for pred, targ in zip(predictions, targets):
-                    p_labels = pred['labels'].cpu().numpy()
-                    t_labels = targ['labels'].cpu().numpy()
-                    p_boxes = pred['boxes'].cpu().numpy()
-                    t_boxes = targ['boxes'].cpu().numpy()
+                    p_labels = pred['labels']
+                    t_labels = targ['labels']
+                    p_boxes = pred['boxes']
+                    t_boxes = targ['boxes']
                     """ found = False
                     for targ in t_boxes:
                         for pred in p_boxes:
@@ -287,7 +287,8 @@ for iteration in range(upper):
                             # verify it's the moving vs not moving
                             if p_labels[j] == t_labels[i]:
                                 # verify the box is tight enough
-                                if box_iou(p_box, t_box) > alpha:
+                                iou_matrix = box_iou(p_box, t_box)
+                                if iou_matrix[0,0].item() > alpha:
                                     found_this_ball = True
                                     break 
                         
