@@ -9,6 +9,9 @@ import os
 import gc
 import numpy as np
 from xml.dom import minidom
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
 
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
@@ -28,7 +31,7 @@ from torchvision.models.detection import FasterRCNN
 
 # for videos
 import cv2 as cv
-
+from ultralytics.utils.metrics import box_iou
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 #define nn
@@ -94,7 +97,7 @@ num_epochs = 1
 
 
 end = 0
-os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
+os.chdir(r'/home/linuxmachine/Documents/Semester 3/Forecasting Project/econ8310-final-project/')
 
 #check for existing model and loop index
 if 'iteration.txt' in os.listdir():
@@ -235,7 +238,7 @@ for iteration in range(upper):
 
 
     BaseballNN.to(device)
-    from ultralytics.utils.metrics import box_iou
+    
 
     alpha = .5 # iou threshold
 
@@ -289,6 +292,18 @@ for iteration in range(upper):
                         
                         if found_this_ball:
                             correct_balls += 1
+                            fig, ax = plt.subplots(1)
+                            ax.imshow(images)
+                            x1, y1, x2, y2 = p_box
+
+                            rect = patches.Rectangle((x1, y1), x2-x1, y2-y1, linewidth=2, edgecolor='r', facecolor='none')
+                            ax.add_patch(rect)
+                            
+                            plt.savefig()
+
+
+
+
 
         accuracy = (correct_balls / total_balls * 100) if total_balls > 0 else 0
         print(f"Ball Detection Accuracy: {accuracy:.2f}%")
