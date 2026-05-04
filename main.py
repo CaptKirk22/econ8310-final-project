@@ -228,7 +228,7 @@ for iteration in range(upper):
 
     correct_balls =0
     #on iterations 4, 8, and 13 use the data to produce test results. Train on all other iterations
-    if iteration+1 in [1,4,8,13]:
+    if iteration+1 in [4,8,13]:
         #define test data loader
         data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -288,14 +288,14 @@ for iteration in range(upper):
                             (x1, y1),
                             x2 - x1,
                             y2 - y1,
-                            linewidth=2,
+                            linewidth=1,
                             edgecolor="red",
                             facecolor="none"
                             )
-
+                            ax.add_patch(rect)
                             
-                            plt.savefig(f'Prediction Images/image{img_count}.png')
-                            plt.close(fig)
+                        plt.savefig(f'Prediction Images/image{img_count}.png')
+                        plt.close(fig)
                     img_count += 1
 
 
