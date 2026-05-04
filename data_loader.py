@@ -17,7 +17,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
 # For visualizing
-import plotly.express as px
+#import plotly.express as px
 from torchvision.io import read_image
 from torchvision import tv_tensors
 from torchvision.transforms.v2 import functional as F
@@ -81,10 +81,12 @@ def compute_iou(boxA, boxB):
 
 # attempting 2 epochs
 num_epochs = 2
+#define image count for naming images later
+img_count = 0
 end = 0
 
 #remove later
-os.chdir(r'/home/linuxmachine/Documents/Semester 3/Forecasting Project/econ8310-final-project/')
+os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
 
 #if continuing from a previous save, continue training where last left off.
 if 'iteration.txt' in os.listdir():
@@ -218,29 +220,29 @@ for iteration in range(upper):
     BaseballNN.to(device)
     
 
-    alpha = .5 # iou threshold
+    alpha = .05 # iou threshold
 
     total_balls =0
 
     correct_balls =0
     #on iterations 4, 8, and 13 use the data to produce test results. Train on all other iterations
-    if iteration+1 in [4,8,13]:
+    if iteration+1 in [1,4,8,13]:
         #define test data loader
-        data_loader_test = torch.utils.data.DataLoader(
+        data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,
         shuffle=False,
         collate_fn=collate_fn
         )
         BaseballNN.eval()
-        size = len(data_loader_test.dataset)
+        size = len(data_loader.dataset)
         with torch.no_grad():
 
-            for images, targets in data_loader_test:
+            for images, targets in data_loader:
                 images = [img.to(device) for img in images]
                 predictions = BaseballNN(images)
                 
-                for pred, targ in zip(predictions, targets):
+                for img, pred, targ in zip(images,predictions, targets):
                     p_labels = pred['labels'].cpu().numpy()
                     t_labels = targ['labels'].cpu().numpy()
                     p_boxes = pred['boxes'].cpu().numpy()
@@ -258,9 +260,11 @@ for iteration in range(upper):
                     total += 1"""
 
                     total_balls += len(t_boxes)
-                    
+
+                    img_np = img.detach().cpu().permute(1, 2, 0).numpy()
+                    matches= []
                     for i, t_box in enumerate(t_boxes):
-                        found_ball = False
+                        found_this_ball = False
                         for j, p_box in enumerate(p_boxes):
                             # verify it's the moving vs not moving
                             if p_labels[j] == t_labels[i]:
@@ -269,18 +273,28 @@ for iteration in range(upper):
                                 print(iou)
                                 if iou > alpha:
                                     found_this_ball = True
+                                    matches.append((p_box,t_labels[i],iou))
+                                    correct_balls += 1
                                     break 
                         
-                        if found_this_ball:
-                            correct_balls += 1
-                            fig, ax = plt.subplots(1)
-                            ax.imshow(images)
-                            x1, y1, x2, y2 = p_box
+                    if len(matches) > 0:
+                        fig, ax = plt.subplots(1, figsize=(8, 8))
+                        ax.imshow(img_np)
+                        for box, label, iou in matches:
+                            x1, y1, x2, y2 = box
+                            rect = patches.Rectangle(
+                            (x1, y1),
+                            x2 - x1,
+                            y2 - y1,
+                            linewidth=2,
+                            edgecolor="red",
+                            facecolor="none"
+                            )
 
-                            rect = patches.Rectangle((x1, y1), x2-x1, y2-y1, linewidth=2, edgecolor='r', facecolor='none')
-                            ax.add_patch(rect)
                             
-                            plt.savefig()
+                            plt.savefig(f'Prediction Images/image{img_count}.png')
+                            plt.close(fig)
+                    img_count += 1
 
 
 
