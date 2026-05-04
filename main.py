@@ -88,7 +88,7 @@ img_count = 0
 end = 0
 
 #TODO: remove later
-os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
+#os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
 
 #if continuing from a previous save, continue training where last left off.
 if 'iteration.txt' in os.listdir():
@@ -305,7 +305,7 @@ for iteration in range(upper):
         accuracy = (correct_balls / total_balls * 100) if total_balls > 0 else 0
         print(f"Ball Detection Accuracy: {accuracy:.2f}%")
         with open('accuracy_log.txt', 'a') as file:
-            file.write(f"Iteration: {iteration+1}, Accuracy: {accuracy:.2f}%\n))
+            file.write(f"Iteration: {iteration+1}, Accuracy: {accuracy:.2f}%\n")
                             
 
         """accuracy = 100.0 * correct / total
@@ -339,7 +339,7 @@ for iteration in range(upper):
         file.write(str(iteration+1))
     print(f"loop {iteration +1} complete")
     #delete temporary data items for memory control
-    del dataset, size, data_loader
+    del dataset, size#, data_loader
 
 
 
