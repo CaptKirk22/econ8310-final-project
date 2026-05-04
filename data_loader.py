@@ -9,12 +9,15 @@ import os
 import gc
 import numpy as np
 from xml.dom import minidom
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
 
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
 # For visualizing
-import plotly.express as px
+#import plotly.express as px
 from torchvision.io import read_image
 from torchvision import tv_tensors
 from torchvision.transforms.v2 import functional as F
@@ -28,7 +31,7 @@ from torchvision.models.detection import FasterRCNN
 
 # for videos
 import cv2 as cv
-
+from ultralytics.utils.metrics import box_iou
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 #define nn
@@ -63,50 +66,41 @@ optimizer = torch.optim.SGD(
     weight_decay=0.0005
 )
 
-# construct an optimizer
+#computing intersection overlap union. Between 0 and 1 where closer to 1 means the box is closer to being properly placed 
+def compute_iou(boxA, boxB):
+        # boxA, boxB: [x1, y1, x2, y2]
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+        interArea = max(0, xB - xA) * max(0, yB - yA)
+        boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+        boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+        iou = interArea / float(boxAArea + boxBArea - interArea + 1e-6)
+        return iou
 
-
-# let's train it just for 2 epochs
-num_epochs = 1
-
-#backbone = torchvision.models.mobilenet_v2(weights="DEFAULT").features
-    #mobilenet_v2 output channels are 1280
-#backbone.out_channels = 1280
-
-            
-    # RPN generate 5 x 3 anchors per spatial location, with 5 different sizes and 3 different aspect ratios. 
-    # Tuple[Tuple[int]] because each feature map could potentially have different sizes and aspect ratios
-#anchor_generator = AnchorGenerator(
-#sizes=((32, 64, 128, 256, 512),),
-#aspect_ratios=((0.5, 1.0, 2.0),)
-#            )
-
-#roi_pooler = torchvision.ops.MultiScaleRoIAlign(
-#    featmap_names=['0'],
-#    output_size=7, # industry standard for FRCNN
-#    sampling_ratio=2
-#        )
-
-
-
-
-
-
-
+# attempting 2 epochs
+num_epochs = 2
+#define image count for naming images later
+img_count = 0
 end = 0
+
+#remove later
 os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
 
-#check for existing model and loop index
+#if continuing from a previous save, continue training where last left off.
 if 'iteration.txt' in os.listdir():
-    with open("file.txt", "r") as f:
+    with open("iteration.txt", "r") as f:
      iteration = int(f.read().strip())
      BaseballNN = torch.load('baseball_model.pt')
 else: iteration = 0
 
-
+#defining range for case where training from beginning
+#4 videos to be used for training per loop for 13 total loops.
 if iteration == 0:
     upper = 13
 else:
+    #when starting from previous save state, begin at correct index
     upper = 13 - iteration
     start = (iteration +1) * 4 + 1
 
@@ -124,7 +118,7 @@ for iteration in range(upper):
     
     print(f'{start}:{end}')
 
-
+    #redefine the class every iteration to get the next set of data
     class BaseballVideos(torch.utils.data.Dataset):
         def __init__(self, root=None, transforms=None):
             self.root = root
@@ -201,14 +195,6 @@ for iteration in range(upper):
                  
             self.imgs = imgs
             self.notes = notes
-
-                # target = {}
-                # target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY", canvas_size=F.get_size(img))
-                # target["masks"] = tv_tensors.Mask(masks)
-                # target["labels"] = labels
-                # target["image_id"] = image_id
-                # target["area"] = area
-                # target["iscrowd"] = iscrowd
             self.imgs
             self.notes
 
@@ -224,41 +210,39 @@ for iteration in range(upper):
                 img, target = self.transforms(img, target)
 
             return img, target
-
+    #call newly defined class to get dataset object
     dataset = BaseballVideos()
-
-
-#cv2_imshow(frame)
 
 
 # define training and validation data loaders
 
-
+    #moving NN to gpu if available otherwise cpu
     BaseballNN.to(device)
-    from ultralytics.utils.metrics import box_iou
+    
 
-    alpha = .5 # iou threshold
+    alpha = .05 # iou threshold
 
     total_balls =0
 
     correct_balls =0
-        
-    if iteration+1 in [4,8,13]:
-        data_loader_test = torch.utils.data.DataLoader(
+    #on iterations 4, 8, and 13 use the data to produce test results. Train on all other iterations
+    if iteration+1 in [1,4,8,13]:
+        #define test data loader
+        data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,
         shuffle=False,
         collate_fn=collate_fn
         )
         BaseballNN.eval()
-        size = len(data_loader_test.dataset)
+        size = len(data_loader.dataset)
         with torch.no_grad():
 
-            for images, targets in data_loader_test:
+            for images, targets in data_loader:
                 images = [img.to(device) for img in images]
                 predictions = BaseballNN(images)
                 
-                for pred, targ in zip(predictions, targets):
+                for img, pred, targ in zip(images,predictions, targets):
                     p_labels = pred['labels'].cpu().numpy()
                     t_labels = targ['labels'].cpu().numpy()
                     p_boxes = pred['boxes'].cpu().numpy()
@@ -276,20 +260,46 @@ for iteration in range(upper):
                     total += 1"""
 
                     total_balls += len(t_boxes)
-                    
+
+                    img_np = img.detach().cpu().permute(1, 2, 0).numpy()
+                    matches= []
                     for i, t_box in enumerate(t_boxes):
-                        found_ball = False
+                        found_this_ball = False
                         for j, p_box in enumerate(p_boxes):
                             # verify it's the moving vs not moving
                             if p_labels[j] == t_labels[i]:
                                 # verify the box is tight enough
-                                if box_iou(p_box, t_box) > alpha:
+                                iou = compute_iou(p_box, t_box)
+                                print(iou)
+                                if iou > alpha:
                                     found_this_ball = True
+                                    matches.append((p_box,t_labels[i],iou))
+                                    correct_balls += 1
                                     break 
                         
-                        if found_this_ball:
-                            correct_balls += 1
+                    if len(matches) > 0:
+                        fig, ax = plt.subplots(1, figsize=(8, 8))
+                        ax.imshow(img_np)
+                        for box, label, iou in matches:
+                            x1, y1, x2, y2 = box
+                            rect = patches.Rectangle(
+                            (x1, y1),
+                            x2 - x1,
+                            y2 - y1,
+                            linewidth=2,
+                            edgecolor="red",
+                            facecolor="none"
+                            )
 
+                            
+                            plt.savefig(f'Prediction Images/image{img_count}.png')
+                            plt.close(fig)
+                    img_count += 1
+
+
+
+
+        #compute percentage of balls accurately classified and placed within the iou threshhold
         accuracy = (correct_balls / total_balls * 100) if total_balls > 0 else 0
         print(f"Ball Detection Accuracy: {accuracy:.2f}%")
                             
@@ -298,29 +308,33 @@ for iteration in range(upper):
         print(f"Detection accuracy: {accuracy:.2f}%")"""
 
     else: 
-        
+        #define training data loader
         data_loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=2,
         shuffle=True,
         collate_fn=collate_fn
         )
+        #train for 2 epochs
         for epoch in range(num_epochs):
             BaseballNN.train()
             size = len(data_loader.dataset)
             for batch, (X, label) in enumerate(data_loader):
                 pred = BaseballNN(X, label)
+                #get loss from predefined loss function from faster R CNN
                 loss = sum(loss for loss in pred.values())
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+                #report loss values
                 if batch % 10 == 0:
                     loss_val, current = loss.item(), (batch + 1) * len(X)
                     print(f"loss: {loss_val:>7f}  [{current:>5d}/{size:>5d}]")
-            torch.save(BaseballNN.state_dict(),'baseball_model.pt')
-            with open('iteration.txt', 'w') as file:
-                file.write(str(iteration+1))
+    torch.save(BaseballNN.state_dict(),'baseball_model.pt') #save model after every iteration
+    with open('iteration.txt', 'w') as file: #save the iteration to txt file for loading in for training later
+        file.write(str(iteration+1))
     print(f"loop {iteration +1} complete")
+    #delete temporary data items for memory control
     del dataset, size, data_loader
 
 
