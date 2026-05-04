@@ -95,7 +95,7 @@ end = 0
 #os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
 
 #check for existing model and loop index
-if 'iteration.txt' in os.listdir():
+if 'iteration.txt' and 'baseball_model.pt' in os.listdir():
     with open("iteration.txt", "r") as f:
      iteration = int(f.read().strip())
      weights = torch.load('baseball_model.pt')
@@ -119,7 +119,7 @@ for iteration in range(upper):
     if iteration == 0:
         end = 5
     else:    
-        end = (iteration +1) * 4 + 1
+        end = (iteration +1) * 2
     
     print(f'{start}:{end}')
 
@@ -131,8 +131,8 @@ for iteration in range(upper):
             # load all image files, sorting them to
             # ensure that they are aligned
             if root==None:
-                self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[start:end][0:3]
-                self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[start:end][0:3]
+                self.vids = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.mov' in i]))[0:3]
+                self.notes = list(sorted([os.path.join("Model Data", i) for i in os.listdir(os.path.join(os.path.curdir, "Model Data")) if '.xml' in i]))[0:3]
                 if len(self.vids)!=len(self.notes):
                     raise RuntimeError("Mismatch of annotation files and video files.\nPlease confirm that you have one annotation file for each video and try again.")
             imgs = []
@@ -234,7 +234,7 @@ for iteration in range(upper):
 
 
     BaseballNN.to(device)
-    from ultralytics.utils.metrics import box_iou
+    #from ultralytics.utils.metrics import box_iou
 
     alpha = 0 # iou threshold
 
@@ -246,6 +246,18 @@ for iteration in range(upper):
 
     train_sampler = torch.utils.data.Subset(dataset, range(0, 2))
     test_sampler = torch.utils.data.Subset(dataset, [2])
+
+    def compute_iou(boxA, boxB):
+        # boxA, boxB: [x1, y1, x2, y2]
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+        interArea = max(0, xB - xA) * max(0, yB - yA)
+        boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+        boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+        iou = interArea / float(boxAArea + boxBArea - interArea + 1e-6)
+        return iou
         
     if iteration+1 in [3]:
         data_loader_test = torch.utils.data.DataLoader(
@@ -263,10 +275,10 @@ for iteration in range(upper):
                 predictions = BaseballNN(images)
                 
                 for pred, targ in zip(predictions, targets):
-                    p_labels = pred['labels']
-                    t_labels = targ['labels']
-                    p_boxes = pred['boxes']
-                    t_boxes = targ['boxes']
+                    p_labels = pred['labels'].cpu().numpy()
+                    t_labels = targ['labels'].cpu().numpy()
+                    p_boxes = pred['boxes'].cpu().numpy()
+                    t_boxes = targ['boxes'].cpu().numpy()
                     """ found = False
                     for targ in t_boxes:
                         for pred in p_boxes:
@@ -287,16 +299,17 @@ for iteration in range(upper):
                             # verify it's the moving vs not moving
                             if p_labels[j] == t_labels[i]:
                                 # verify the box is tight enough
-                                iou_matrix = box_iou(p_box, t_box)
-                                if iou_matrix[0,0].item() > alpha:
-                                    found_this_ball = True
+                                if compute_iou(p_box, t_box) > alpha:
+                                    found_ball = True
                                     break 
                         
-                        if found_this_ball:
+                        if found_ball:
                             correct_balls += 1
 
         accuracy = (correct_balls / total_balls * 100) if total_balls > 0 else 0
         print(f"Ball Detection Accuracy: {accuracy:.2f}%")
+        with open('accuracy_log.txt', 'a') as file:
+                file.write(f"Iteration: {iteration+1}, Accuracy: {accuracy:.2f}%\n))
                             
 
         """accuracy = 100.0 * correct / total
