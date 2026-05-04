@@ -91,7 +91,7 @@ end = 0
 #os.chdir(r'C:\Users\mackm\Documents\Other\School\UNO\Semester 3\Forecasting\Project Git\econ8310-final-project')
 
 #if continuing from a previous save, continue training where last left off.
-if 'iteration.txt' in os.listdir():
+if 'iteration.txt' and 'baseball_model.pt' in os.listdir():
     with open("iteration.txt", "r") as f:
      iteration = int(f.read().strip())
      BaseballNN = torch.load('baseball_model.pt')
